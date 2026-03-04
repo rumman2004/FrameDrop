@@ -14,25 +14,27 @@ const app = express();
 connectDB();
 
 // ── CORS ───────────────────────────────────────────────────────────────────
-// credentials:true + wildcard origin works because we use
-// a dynamic origin callback (not a static '*' string).
-// A static '*' with credentials:true is rejected by browsers.
 const corsOptions = {
   origin: (_origin, callback) => callback(null, true),
   credentials: true,
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // handle preflight for every route
+app.options('*', cors(corsOptions));
 
 // ── Body parsers ───────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ── Routes ─────────────────────────────────────────────────────────────────
-app.use('/api/auth',  authRoutes);
-app.use('/api/share', shareRoutes);
-app.use('/api/admin', adminRoutes);
+// ── Root — confirms API is alive ───────────────────────────────────────────
+// This is what you were seeing as 404 — GET / had no handler
+app.get('/', (_req, res) => {
+  res.json({
+    status:  'ok',
+    message: 'FrameDrop API is running',
+    version: '1.0.0',
+  });
+});
 
 // ── Health check ───────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
@@ -44,11 +46,15 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-// ── 404 — must come AFTER all routes ───────────────────────────────────────
+// ── Routes ─────────────────────────────────────────────────────────────────
+app.use('/api/auth',  authRoutes);
+app.use('/api/share', shareRoutes);
+app.use('/api/admin', adminRoutes);
+
+// ── 404 — after all routes ─────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({
     message: `Route not found: ${req.method} ${req.url}`,
-    // ↑ include method+url so you can see exactly what was called
   });
 });
 
@@ -60,9 +66,8 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-// ── Local dev only — NO top-level await (breaks Vercel ESM bundling) ───────
+// ── Dev only ───────────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'production') {
-  // Use .then() instead of top-level await — safe in all environments
   import('./jobs/cleanupJob.js')
     .then(({ startCleanupJob }) => {
       const PORT = process.env.PORT ?? 5000;
@@ -77,5 +82,4 @@ if (process.env.NODE_ENV !== 'production') {
     });
 }
 
-// ── Vercel serverless export ───────────────────────────────────────────────
 export default app;
