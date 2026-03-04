@@ -146,7 +146,7 @@ export async function startCleanupJob() {
   await runCleanup().catch(console.error);
 
   // Then every 30 minutes locally
-  cron.schedule('*/30 * * * *', () => {
+  cron.schedule('0 2 * * *', () => {
     runCleanup().catch(console.error);
   });
 
