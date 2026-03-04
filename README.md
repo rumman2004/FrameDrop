@@ -198,7 +198,7 @@ framedrop/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/framedrop.git
+git clone https://github.com/rumman2004/framedrop.git
 cd framedrop
 ```
 
@@ -530,7 +530,7 @@ SOFTWARE.
 
 Built with ❤️ for photographers who deserve better tools.
 
-[![GitHub](https://img.shields.io/badge/GitHub-Follow-181717?style=for-the-badge&logo=github)](https://github.com/yourusername)
+[![GitHub](https://img.shields.io/badge/GitHub-Follow-181717?style=for-the-badge&logo=github)](https://github.com/rumman2004)
 
 ---
 
