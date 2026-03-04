@@ -1,0 +1,60 @@
+# ── Dependencies ──────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Environment variables ──────────────────────────────────────────────────
+# Never commit secrets — MONGO_URI, JWT_SECRET, Cloudinary keys etc.
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+
+# ── Build output ──────────────────────────────────────────────────────────
+dist/
+build/
+
+# ── Logs ──────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Uploads (local temp files before Cloudinary) ──────────────────────────
+uploads/
+tmp/
+temp/
+
+# ── Editor / OS ───────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── Testing ───────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Cache ─────────────────────────────────────────────────────────────────
+.cache/
+.eslintcache
+
+# ── Vercel ────────────────────────────────────────────────────────────────
+.vercel/
+
+# ── TypeScript ────────────────────────────────────────────────────────────
+*.tsbuildinfo
