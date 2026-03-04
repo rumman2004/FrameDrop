@@ -11,14 +11,40 @@ import { cleanupMiddleware } from './jobs/cleanupJob.js';
 
 const app = express();
 
-// ── Connect DB ─────────────────────────────────────────────────────────────
-connectDB();
-
-// ── CORS ───────────────────────────────────────────────────────────────────
+// ── CORS — must be FIRST before everything else ────────────────────────────
+// Handles the OPTIONS preflight that browsers send before every real request
 const allowedOrigins = [
-  process.env.CLIENT_URL,
+  process.env.CLIENT_URL
 ].filter(Boolean);
 
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  // Set CORS headers on every single response
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader(
+    'Access-Control-Allow-Methods',
+    'GET, POST, PUT, PATCH, DELETE, OPTIONS'
+  );
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+  );
+
+  // Preflight request — respond immediately with 200 and stop here
+  // Browsers send OPTIONS before every cross-origin request
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+
+  next();
+});
+
+// Keep cors() package as well for compatibility
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -30,19 +56,15 @@ app.use(
   })
 );
 
+// ── Connect DB ─────────────────────────────────────────────────────────────
+connectDB();
+
 // ── Body parsers ───────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ── Background cleanup middleware ──────────────────────────────────────────
 app.use(cleanupMiddleware);
-
-// ── Debug middleware — REMOVE after fixing ─────────────────────────────────
-// Logs every incoming request so you can see what URL Vercel is sending
-app.use((req, _res, next) => {
-  console.log(`[${req.method}] ${req.originalUrl}`);
-  next();
-});
 
 // ── Routes ─────────────────────────────────────────────────────────────────
 app.use('/api/auth',  authRoutes);
@@ -59,18 +81,17 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-// ── Root check — confirms Express is booting ───────────────────────────────
+// ── Root check ─────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
   res.json({ message: 'FrameDrop server is alive' });
 });
 
 // ── 404 ────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
-  console.log(`❌ 404 — no route matched: [${req.method}] ${req.originalUrl}`);
   res.status(404).json({
-    message:  'Route not found',
-    method:   req.method,
-    path:     req.originalUrl,   // ← this will tell you exactly what was called
+    message: 'Route not found',
+    method:  req.method,
+    path:    req.originalUrl,
   });
 });
 
@@ -89,7 +110,6 @@ if (process.env.NODE_ENV !== 'production') {
     console.log(`🚀 Dev server → http://localhost:${PORT}`);
   });
 
-  // start local cron only in dev — dynamic import avoids bundling issues
   import('./jobs/cleanupJob.js')
     .then(({ startCleanupJob }) => startCleanupJob())
     .catch(console.error);
