@@ -1,18 +1,17 @@
+// src/lib/api.js
 import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
-  withCredentials: true,
+  // withCredentials: true  ← REMOVE THIS, breaks wildcard CORS
 });
 
-// Attach JWT token to every request automatically
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Handle 401 globally — auto logout if token expired
 api.interceptors.response.use(
   (res) => res,
   (err) => {
