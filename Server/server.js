@@ -10,35 +10,31 @@ import adminRoutes from './routes/admin.js';
 
 const app = express();
 
-// ── Connect DB ────────────────────────────────────────────────────────────
-// Mongoose caches the connection internally — safe to call on every
-// cold-start (Vercel serverless) and on normal server boot
+// ── Connect DB ─────────────────────────────────────────────────────────────
 connectDB();
 
-// ── CORS ──────────────────────────────────────────────────────────────────
+// ── CORS ───────────────────────────────────────────────────────────────────
+// credentials:true + wildcard origin works because we use
+// a dynamic origin callback (not a static '*' string).
+// A static '*' with credentials:true is rejected by browsers.
 const corsOptions = {
-  origin: (origin, callback) => {
-    // Allow ALL origins dynamically
-    callback(null, true);
-  },
-  credentials: true, // Allow cookies/headers
+  origin: (_origin, callback) => callback(null, true),
+  credentials: true,
 };
 
 app.use(cors(corsOptions));
-// 2. FORCE an explicit OK response for all OPTIONS requests
-// This fixes the "Preflight... does not have HTTP ok status" error
-app.options('*', cors(corsOptions));
+app.options('*', cors(corsOptions)); // handle preflight for every route
 
-// ── Body parsers ──────────────────────────────────────────────────────────
+// ── Body parsers ───────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ── Routes ────────────────────────────────────────────────────────────────
+// ── Routes ─────────────────────────────────────────────────────────────────
 app.use('/api/auth',  authRoutes);
 app.use('/api/share', shareRoutes);
 app.use('/api/admin', adminRoutes);
 
-// ── Health check ──────────────────────────────────────────────────────────
+// ── Health check ───────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
   res.json({
     status:    'ok',
@@ -48,33 +44,38 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-// ── 404 ───────────────────────────────────────────────────────────────────
-app.use((_req, res) => {
-  res.status(404).json({ message: 'Route not found' });
+// ── 404 — must come AFTER all routes ───────────────────────────────────────
+app.use((req, res) => {
+  res.status(404).json({
+    message: `Route not found: ${req.method} ${req.url}`,
+    // ↑ include method+url so you can see exactly what was called
+  });
 });
 
-// ── Global error handler ──────────────────────────────────────────────────
+// ── Global error handler ───────────────────────────────────────────────────
 app.use((err, _req, res, _next) => {
   console.error('❌ Server error:', err.message);
-  res.status(err.status || 500).json({
-    message: err.message || 'Internal server error',
+  res.status(err.status ?? 500).json({
+    message: err.message ?? 'Internal server error',
   });
 });
 
-// ── Local dev — listen + start cron ───────────────────────────────────────
-// On Vercel this block is skipped entirely.
-// The cron job runs via vercel.json → api/cron.js instead.
+// ── Local dev only — NO top-level await (breaks Vercel ESM bundling) ───────
 if (process.env.NODE_ENV !== 'production') {
-  const { startCleanupJob } = await import('./jobs/cleanupJob.js');
-  const PORT = process.env.PORT || 5000;
-
-  app.listen(PORT, () => {
-    console.log(`🚀 Dev server → http://localhost:${PORT}`);
-    startCleanupJob();
-  });
+  // Use .then() instead of top-level await — safe in all environments
+  import('./jobs/cleanupJob.js')
+    .then(({ startCleanupJob }) => {
+      const PORT = process.env.PORT ?? 5000;
+      app.listen(PORT, () => {
+        console.log(`🚀 Dev server → http://localhost:${PORT}`);
+        startCleanupJob();
+      });
+    })
+    .catch((err) => {
+      console.error('Failed to start dev server:', err);
+      process.exit(1);
+    });
 }
 
-// ── Vercel serverless export ──────────────────────────────────────────────
-// Vercel imports this file and calls the exported app directly.
-// No port binding needed — Vercel handles all of that.
+// ── Vercel serverless export ───────────────────────────────────────────────
 export default app;

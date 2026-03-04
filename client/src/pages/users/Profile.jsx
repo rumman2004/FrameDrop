@@ -82,14 +82,14 @@ export default function Profile() {
 
   // ── Fetch user's share sessions ───────────────────────────────────────
   useEffect(() => {
-    api.get('/share/my')
-      .then(({ data }) => {
-        setSessions(Array.isArray(data) ? data : []);
-        setSessionsError(false);
-      })
-      .catch(() => setSessionsError(true))
-      .finally(() => setSessionsLoading(false));
-  }, []);
+  api.get('/share/my')             // → /api/share/my  ✓
+    .then(({ data }) => {
+      setSessions(Array.isArray(data) ? data : []);
+      setSessionsError(false);
+    })
+    .catch(() => setSessionsError(true))
+    .finally(() => setSessionsLoading(false));
+}, []);
 
   // ── Derived stats — memoised so `now` is fresh per render ────────────
   const { active, expired } = useMemo(() => {
@@ -130,9 +130,9 @@ export default function Profile() {
     setAvatarMsg(null);
 
     try {
-      const { data } = await api.patch('/auth/avatar', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const { data } = await api.patch('/auth/avatar', formData, {  // → /api/auth/avatar  ✓
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
 
       const secureUrl = safeAvatarUrl(data.avatar);
 
