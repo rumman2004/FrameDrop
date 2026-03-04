@@ -16,7 +16,7 @@
       "dest": "/api/cron.js"
     },
     {
-      "src": "/api/(.*)",
+      "src": "/(.*)",
       "dest": "/server.js"
     }
   ],

@@ -7,7 +7,7 @@ import connectDB  from './config/db.js';
 import authRoutes  from './routes/auth.js';
 import shareRoutes from './routes/share.js';
 import adminRoutes from './routes/admin.js';
-import { cleanupMiddleware } from './jobs/cleanupJob.js'; // ← add this
+import { cleanupMiddleware } from './jobs/cleanupJob.js';
 
 const app = express();
 
@@ -16,7 +16,7 @@ connectDB();
 
 // ── CORS ──────────────────────────────────────────────────────────────────
 const allowedOrigins = [
-  process.env.CLIENT_URL
+  process.env.CLIENT_URL,
 ].filter(Boolean);
 
 app.use(
@@ -34,9 +34,8 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ── Background cleanup on every request (Vercel Hobby workaround) ─────────
-// Runs at most once per 10 min, never blocks responses
-app.use(cleanupMiddleware); // ← add this
+// ── Background cleanup middleware ─────────────────────────────────────────
+app.use(cleanupMiddleware);
 
 // ── Routes ────────────────────────────────────────────────────────────────
 app.use('/api/auth',  authRoutes);
@@ -66,7 +65,7 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-// ── Local dev only ────────────────────────────────────────────────────────
+// ── Local dev only — Vercel does NOT use app.listen() ────────────────────
 if (process.env.NODE_ENV !== 'production') {
   const { startCleanupJob } = await import('./jobs/cleanupJob.js');
   const PORT = process.env.PORT || 5000;
@@ -76,4 +75,5 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
+// ── Vercel needs this — MUST be a default export ─────────────────────────
 export default app;
