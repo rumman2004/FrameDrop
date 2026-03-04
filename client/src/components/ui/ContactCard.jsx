@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useCallback, useMemo } from 'react';
+import { safeAvatarUrl } from '../../lib/avatarUrl';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const ANIMATION_CONFIG = {
@@ -20,11 +21,11 @@ if (typeof document !== 'undefined' && !document.getElementById(KF_ID)) {
   s.id = KF_ID;
   s.textContent = `
     @keyframes cc-glare-sweep {
-      0%   { transform: translate3d(-120%, -60%, 2px) rotate(-25deg); opacity: 0;   }
+      0%   { transform: translate3d(-120%,-60%,2px) rotate(-25deg); opacity: 0;   }
       25%  { opacity: 0.55; }
-      50%  { transform: translate3d( 120%,  60%, 2px) rotate(-25deg); opacity: 0.5; }
+      50%  { transform: translate3d( 120%, 60%,2px) rotate(-25deg); opacity: 0.5; }
       75%  { opacity: 0.25; }
-      100% { transform: translate3d(-120%, -60%, 2px) rotate(-25deg); opacity: 0;   }
+      100% { transform: translate3d(-120%,-60%,2px) rotate(-25deg); opacity: 0;   }
     }
     @keyframes cc-fade-in {
       from { opacity: 0; transform: translateY(10px); }
@@ -40,7 +41,8 @@ if (typeof document !== 'undefined' && !document.getElementById(KF_ID)) {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function InitialsAvatar({ name = '', size = 80 }) {
-  const initials = name.split(' ').map(n => n[0] ?? '').join('').toUpperCase().slice(0,2) || '?';
+  const initials =
+    name.split(' ').map(n => n[0] ?? '').join('').toUpperCase().slice(0, 2) || '?';
   return (
     <div style={{
       width: '100%', height: '100%',
@@ -56,7 +58,8 @@ function InitialsAvatar({ name = '', size = 80 }) {
 }
 
 function MiniInitials({ name = '' }) {
-  const initials = name.split(' ').map(n => n[0] ?? '').join('').toUpperCase().slice(0,2) || '?';
+  const initials =
+    name.split(' ').map(n => n[0] ?? '').join('').toUpperCase().slice(0, 2) || '?';
   return (
     <div style={{
       width: '100%', height: '100%',
@@ -75,16 +78,14 @@ function StatPill({ label, value, color = 'rgba(255,255,255,0.8)' }) {
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       gap: 3, padding: '6px 10px',
       background: 'rgba(255,255,255,0.05)',
-      borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)',
-      flex: 1,
+      borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', flex: 1,
     }}>
       <span style={{ fontSize: '0.95rem', fontWeight: 700, color, lineHeight: 1 }}>
         {value ?? '—'}
       </span>
       <span style={{
-        fontSize: '0.58rem', color: 'rgba(255,255,255,0.35)',
-        lineHeight: 1, whiteSpace: 'nowrap',
-        letterSpacing: '0.05em', textTransform: 'uppercase',
+        fontSize: '0.58rem', color: 'rgba(255,255,255,0.35)', lineHeight: 1,
+        whiteSpace: 'nowrap', letterSpacing: '0.05em', textTransform: 'uppercase',
       }}>
         {label}
       </span>
@@ -107,8 +108,8 @@ function InfoRow({ icon, label, value }) {
         {label}
       </span>
       <span style={{
-        fontSize: '0.7rem', color: 'rgba(255,255,255,0.82)',
-        fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis',
+        fontSize: '0.7rem', color: 'rgba(255,255,255,0.82)', fontWeight: 500,
+        overflow: 'hidden', textOverflow: 'ellipsis',
         whiteSpace: 'nowrap', flex: 1, textAlign: 'right',
       }}>
         {value}
@@ -147,6 +148,16 @@ const ContactCardComponent = ({
   const enterTimerRef = useRef(null);
   const leaveRafRef   = useRef(null);
 
+  // ── Safe avatar URL with fallback state ──────────────────────────────
+  const [mainImgFailed, setMainImgFailed] = React.useState(false);
+  const [miniImgFailed, setMiniImgFailed] = React.useState(false);
+
+  React.useEffect(() => { setMainImgFailed(false); }, [avatarUrl]);
+
+  const safeMain  = safeAvatarUrl(avatarUrl);
+  const hasAvatar = Boolean(safeMain) && !mainImgFailed;
+  const hasMini   = Boolean(safeMain) && !miniImgFailed;
+
   // ── Tilt engine ────────────────────────────────────────────────────────
   const tiltEngine = useMemo(() => {
     if (!enableTilt) return null;
@@ -156,8 +167,7 @@ const ContactCardComponent = ({
     let initUntil = 0;
 
     const setVars = (x, y) => {
-      const shell = shellRef.current;
-      const wrap  = wrapRef.current;
+      const shell = shellRef.current, wrap = wrapRef.current;
       if (!shell || !wrap) return;
       const w  = shell.clientWidth  || 1;
       const h  = shell.clientHeight || 1;
@@ -180,9 +190,8 @@ const ContactCardComponent = ({
     const step = (ts) => {
       if (!running) return;
       if (lastTs === 0) lastTs = ts;
-      const dt  = (ts - lastTs) / 1000; lastTs = ts;
-      const tau = ts < initUntil ? ITAU : TAU;
-      const k   = 1 - Math.exp(-dt / tau);
+      const dt = (ts - lastTs) / 1000; lastTs = ts;
+      const k  = 1 - Math.exp(-dt / (ts < initUntil ? ITAU : TAU));
       cx += (tx - cx) * k; cy += (ty - cy) * k;
       setVars(cx, cy);
       const far = Math.abs(tx - cx) > 0.05 || Math.abs(ty - cy) > 0.05;
@@ -190,50 +199,71 @@ const ContactCardComponent = ({
       else { running = false; lastTs = 0; if (rafId) { cancelAnimationFrame(rafId); rafId = null; } }
     };
 
-    const start = () => { if (running) return; running = true; lastTs = 0; rafId = requestAnimationFrame(step); };
+    const start = () => {
+      if (running) return; running = true; lastTs = 0;
+      rafId = requestAnimationFrame(step);
+    };
 
     return {
       setImmediate(x, y) { cx = x; cy = y; setVars(x, y); },
       setTarget(x, y)    { tx = x; ty = y; start(); },
-      toCenter() { const s = shellRef.current; if (s) this.setTarget(s.clientWidth / 2, s.clientHeight / 2); },
-      beginInitial(ms)   { initUntil = performance.now() + ms; start(); },
-      getCurrent()       { return { x: cx, y: cy, tx, ty }; },
-      cancel() { if (rafId) cancelAnimationFrame(rafId); rafId = null; running = false; lastTs = 0; },
+      toCenter() {
+        const s = shellRef.current;
+        if (s) this.setTarget(s.clientWidth / 2, s.clientHeight / 2);
+      },
+      beginInitial(ms) { initUntil = performance.now() + ms; start(); },
+      getCurrent()     { return { x: cx, y: cy, tx, ty }; },
+      cancel() {
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = null; running = false; lastTs = 0;
+      },
     };
   }, [enableTilt]);
 
   // ── Pointer events ─────────────────────────────────────────────────────
-  const offs = (e, el) => { const r = el.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  const offs = (e, el) => {
+    const r = el.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
 
   const onEnter = useCallback((e) => {
-    const shell = shellRef.current; const card = cardRef.current;
+    const shell = shellRef.current, card = cardRef.current;
     if (!shell || !tiltEngine) return;
     shell.classList.add('active', 'entering');
     if (card) card.style.transition = 'none';
     if (enterTimerRef.current) clearTimeout(enterTimerRef.current);
-    enterTimerRef.current = setTimeout(() => shell.classList.remove('entering'), ANIMATION_CONFIG.ENTER_TRANSITION_MS);
+    enterTimerRef.current = setTimeout(
+      () => shell.classList.remove('entering'),
+      ANIMATION_CONFIG.ENTER_TRANSITION_MS
+    );
     const { x, y } = offs(e, shell); tiltEngine.setTarget(x, y);
   }, [tiltEngine]);
 
   const onMove = useCallback((e) => {
-    const shell = shellRef.current; const card = cardRef.current;
+    const shell = shellRef.current, card = cardRef.current;
     if (!shell || !tiltEngine) return;
-    if (card) card.style.transform = 'translateZ(0) rotateX(var(--rotate-y)) rotateY(var(--rotate-x))';
+    if (card)
+      card.style.transform = 'translateZ(0) rotateX(var(--rotate-y)) rotateY(var(--rotate-x))';
     const { x, y } = offs(e, shell); tiltEngine.setTarget(x, y);
   }, [tiltEngine]);
 
   const onLeave = useCallback(() => {
-    const shell = shellRef.current; const card = cardRef.current;
+    const shell = shellRef.current, card = cardRef.current;
     if (!shell || !tiltEngine) return;
     if (card) {
-      card.style.transition = shell.classList.contains('entering') ? 'transform 180ms ease-out' : 'transform 1s ease';
-      card.style.transform  = 'translateZ(0) rotateX(0deg) rotateY(0deg)';
+      card.style.transition = shell.classList.contains('entering')
+        ? 'transform 180ms ease-out'
+        : 'transform 1s ease';
+      card.style.transform = 'translateZ(0) rotateX(0deg) rotateY(0deg)';
     }
     tiltEngine.toCenter();
     const check = () => {
       const { x, y, tx: ttx, ty: tty } = tiltEngine.getCurrent();
-      if (Math.hypot(ttx - x, tty - y) < 0.6) { shell.classList.remove('active'); leaveRafRef.current = null; }
-      else { leaveRafRef.current = requestAnimationFrame(check); }
+      if (Math.hypot(ttx - x, tty - y) < 0.6) {
+        shell.classList.remove('active'); leaveRafRef.current = null;
+      } else {
+        leaveRafRef.current = requestAnimationFrame(check);
+      }
     };
     if (leaveRafRef.current) cancelAnimationFrame(leaveRafRef.current);
     leaveRafRef.current = requestAnimationFrame(check);
@@ -261,28 +291,29 @@ const ContactCardComponent = ({
     };
   }, [enableTilt, tiltEngine, onEnter, onMove, onLeave]);
 
-  // ── Derived ────────────────────────────────────────────────────────────
+  // ── Derived values ─────────────────────────────────────────────────────
   const displayHandle = handle || email?.split('@')[0] || 'user';
   const displayRole   = isAdmin ? 'Administrator' : role;
-  const hasAvatar     = Boolean(avatarUrl);
-
-  const accentColor  = isAdmin ? '#fb923c'               : '#a78bfa';
-  const accentDim    = isAdmin ? 'rgba(251,146,60,0.28)' : 'rgba(139,92,246,0.28)';
-  const accentBorder = isAdmin ? 'rgba(251,146,60,0.45)' : 'rgba(139,92,246,0.45)';
-  const glowColor    = behindGlowColor ?? (isAdmin ? 'rgba(251,146,60,0.4)' : 'rgba(139,92,246,0.4)');
-  const CARD_RADIUS  = '22px';
+  const accentColor   = isAdmin ? '#fb923c'               : '#a78bfa';
+  const accentDim     = isAdmin ? 'rgba(251,146,60,0.28)' : 'rgba(139,92,246,0.28)';
+  const accentBorder  = isAdmin ? 'rgba(251,146,60,0.45)' : 'rgba(139,92,246,0.45)';
+  const glowColor     = behindGlowColor ?? (isAdmin
+    ? 'rgba(251,146,60,0.4)'
+    : 'rgba(139,92,246,0.4)');
+  const CARD_RADIUS   = '22px';
 
   const wrapStyle = {
     '--pointer-x': '50%', '--pointer-y': '50%',
-    '--pointer-from-center': '0', '--pointer-from-top': '0.5', '--pointer-from-left': '0.5',
-    '--rotate-x': '0deg', '--rotate-y': '0deg',
-    '--background-x': '50%', '--background-y': '50%',
+    '--pointer-from-center': '0', '--pointer-from-top': '0.5',
+    '--pointer-from-left': '0.5', '--rotate-x': '0deg',
+    '--rotate-y': '0deg', '--background-x': '50%', '--background-y': '50%',
   };
 
   const fmtDate = (d) => {
     if (!d) return null;
     const dt = new Date(d);
-    return isNaN(dt) ? null : dt.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    return isNaN(dt) ? null
+      : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const isExpired   = expiresAt ? new Date(expiresAt) <= new Date() : false;
@@ -294,13 +325,17 @@ const ContactCardComponent = ({
     <div
       ref={wrapRef}
       className={`relative touch-none select-none ${className}`.trim()}
-      style={{ perspective: '600px', transform: 'translate3d(0,0,0.1px)', width: '100%', ...wrapStyle }}
+      style={{
+        perspective: '600px', transform: 'translate3d(0,0,0.1px)',
+        width: '100%', ...wrapStyle,
+      }}
     >
       {/* Behind glow */}
       {behindGlowEnabled && (
         <div aria-hidden="true" style={{
           position: 'absolute', inset: '-28px', zIndex: 0, pointerEvents: 'none',
-          background: `radial-gradient(circle at var(--pointer-x) var(--pointer-y), ${glowColor} 0%, transparent 65%)`,
+          background: `radial-gradient(circle at var(--pointer-x) var(--pointer-y),
+                        ${glowColor} 0%, transparent 65%)`,
           filter: 'blur(55px) saturate(1.4)', opacity: 0.85, borderRadius: CARD_RADIUS,
         }} />
       )}
@@ -323,28 +358,23 @@ const ContactCardComponent = ({
               calc((var(--pointer-from-top)  * 28px) - 10px)
               28px -8px
             `,
-            // ── LAYOUT: flex column so avatar top + info bottom ──────
             display: 'flex', flexDirection: 'column',
           }}
         >
-
-          {/* ════════════════════════════════════════════════════════
-              TOP HALF — avatar photo, clearly visible, fixed height
-          ════════════════════════════════════════════════════════ */}
+          {/* ══════════════════════════════════════════════════════
+              TOP — avatar photo
+          ══════════════════════════════════════════════════════ */}
           <div style={{
-            position:   'relative',
-            height:     220,          // ← fixed pixel height — always visible
-            flexShrink: 0,
-            overflow:   'hidden',
-            borderRadius: `${CARD_RADIUS} ${CARD_RADIUS} 0 0`,
+            position: 'relative', height: 220, flexShrink: 0,
+            overflow: 'hidden', borderRadius: `${CARD_RADIUS} ${CARD_RADIUS} 0 0`,
           }}>
-
-            {/* Avatar image — fills the top half */}
             {hasAvatar ? (
               <img
-                src={avatarUrl}
+                src={safeMain}
                 alt={`${name} avatar`}
                 loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={() => setMainImgFailed(true)}
                 style={{
                   position: 'absolute', inset: 0,
                   width: '100%', height: '100%',
@@ -357,55 +387,53 @@ const ContactCardComponent = ({
                   `,
                   transition: 'transform 120ms ease-out', willChange: 'transform',
                 }}
-                onError={(e) => { e.target.style.display = 'none'; }}
               />
             ) : (
               <InitialsAvatar name={name} size={100} />
             )}
 
-            {/* Subtle bottom fade so avatar blends into info panel */}
+            {/* Fade overlay */}
             <div aria-hidden="true" style={{
               position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%',
               background: 'linear-gradient(to top, rgba(8,4,20,0.95) 0%, rgba(8,4,20,0.4) 60%, transparent 100%)',
               pointerEvents: 'none',
             }} />
 
-            {/* Subtle edge vignette */}
+            {/* Vignette */}
             <div aria-hidden="true" style={{
               position: 'absolute', inset: 0, pointerEvents: 'none',
               background: `radial-gradient(ellipse at center,
-                transparent 45%, rgba(0,0,0,0.12) 70%, rgba(0,0,0,0.4) 100%
-              )`,
+                transparent 45%, rgba(0,0,0,0.12) 70%, rgba(0,0,0,0.4) 100%)`,
             }} />
 
-            {/* Accent top stripe */}
+            {/* Accent stripe */}
             <div aria-hidden="true" style={{
-              position: 'absolute', top: 0, left: 0, right: 0, height: 3, pointerEvents: 'none',
-              background: `linear-gradient(90deg, transparent 0%, ${accentColor} 35%, ${accentColor} 65%, transparent 100%)`,
+              position: 'absolute', top: 0, left: 0, right: 0,
+              height: 3, pointerEvents: 'none',
+              background: `linear-gradient(90deg,
+                transparent 0%, ${accentColor} 35%, ${accentColor} 65%, transparent 100%)`,
               opacity: 0.9,
             }} />
 
-            {/* Role badge — top right corner of the photo */}
+            {/* Role badge */}
             <div style={{
               position: 'absolute', top: 12, right: 12,
               padding: '3px 10px', borderRadius: 20,
               background: accentDim, border: `1px solid ${accentBorder}`,
-              fontSize: '0.6rem', fontWeight: 700,
-              color: accentColor, letterSpacing: '0.07em',
-              textTransform: 'uppercase', backdropFilter: 'blur(10px)',
-              whiteSpace: 'nowrap',
+              fontSize: '0.6rem', fontWeight: 700, color: accentColor,
+              letterSpacing: '0.07em', textTransform: 'uppercase',
+              backdropFilter: 'blur(10px)', whiteSpace: 'nowrap',
             }}>
               {displayRole}
             </div>
 
-            {/* Name + handle — bottom-left of the photo area */}
+            {/* Name + handle */}
             <div style={{
               position: 'absolute', bottom: 12, left: 14, right: 14,
               pointerEvents: 'none',
             }}>
               <h3 style={{
-                margin: 0,
-                fontSize: 'clamp(1rem, 4vw, 1.18rem)',
+                margin: 0, fontSize: 'clamp(1rem, 4vw, 1.18rem)',
                 fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.2,
                 backgroundImage: 'linear-gradient(to bottom, #ffffff 0%, #d4bcff 100%)',
                 backgroundClip: 'text', WebkitBackgroundClip: 'text',
@@ -424,10 +452,10 @@ const ContactCardComponent = ({
               </p>
             </div>
 
-            {/* Glass shine on photo */}
+            {/* Glass shine */}
             <div aria-hidden="true" style={{
-              position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden',
-              borderRadius: `${CARD_RADIUS} ${CARD_RADIUS} 0 0`,
+              position: 'absolute', inset: 0, pointerEvents: 'none',
+              overflow: 'hidden', borderRadius: `${CARD_RADIUS} ${CARD_RADIUS} 0 0`,
             }}>
               <div style={{
                 position: 'absolute', inset: 0, mixBlendMode: 'screen',
@@ -437,25 +465,24 @@ const ContactCardComponent = ({
                 )`,
               }} />
               <div style={{
-                position: 'absolute', top: '-20%', left: '-60%', width: '38%', height: '140%',
+                position: 'absolute', top: '-20%', left: '-60%',
+                width: '38%', height: '140%',
                 background: 'linear-gradient(105deg, transparent 25%, rgba(255,255,255,0.14) 50%, transparent 75%)',
                 animation: 'cc-glare-sweep 7s ease-in-out infinite', mixBlendMode: 'screen',
               }} />
             </div>
           </div>
 
-          {/* ════════════════════════════════════════════════════════
-              BOTTOM HALF — info panel, sits below the photo
-          ════════════════════════════════════════════════════════ */}
+          {/* ══════════════════════════════════════════════════════
+              BOTTOM — info panel
+          ══════════════════════════════════════════════════════ */}
           <div style={{
-            flex: 1,
+            flex: 1, padding: '14px',
             background: 'linear-gradient(to bottom, rgba(8,4,20,0.98) 0%, rgba(10,5,25,1) 100%)',
             borderRadius: `0 0 ${CARD_RADIUS} ${CARD_RADIUS}`,
-            padding: '14px 14px 14px',
             display: 'flex', flexDirection: 'column', gap: 10,
           }}>
-
-            {/* Stats row */}
+            {/* Stats */}
             {showStats && (
               <div style={{ display: 'flex', gap: 6 }}>
                 <StatPill label="Photos"  value={photoCount}   color="rgba(255,255,255,0.85)" />
@@ -473,37 +500,34 @@ const ContactCardComponent = ({
               display: 'flex', flexDirection: 'column', gap: 0,
               boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
             }}>
-
-              {/* Mini avatar + email + online */}
+              {/* Mini avatar row */}
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 paddingBottom: 9, marginBottom: 8,
                 borderBottom: '1px solid rgba(255,255,255,0.06)',
               }}>
-                {/* Mini avatar */}
                 <div style={{
                   width: 38, height: 38, borderRadius: '50%',
                   overflow: 'hidden', flexShrink: 0,
-                  border: `2px solid ${accentBorder}`,
-                  background: '#1a0a2e',
+                  border: `2px solid ${accentBorder}`, background: '#1a0a2e',
                 }}>
-                  {hasAvatar ? (
+                  {hasMini ? (
                     <img
-                      src={avatarUrl}
+                      src={safeMain}
                       alt={name}
+                      referrerPolicy="no-referrer"
+                      onError={() => setMiniImgFailed(true)}
                       style={{
                         width: '100%', height: '100%',
                         objectFit: 'cover', display: 'block',
                         mixBlendMode: 'normal', filter: 'none',
                       }}
-                      onError={(e) => { e.target.style.display = 'none'; }}
                     />
                   ) : (
                     <MiniInitials name={name} />
                   )}
                 </div>
 
-                {/* Email + online dot */}
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <p style={{
                     margin: 0, fontSize: '0.7rem',
@@ -546,7 +570,8 @@ const ContactCardComponent = ({
             <div style={{ display: 'flex', gap: 8 }}>
               {onContact && (
                 <button
-                  type="button" onClick={onContact} aria-label={`Contact ${name}`}
+                  type="button" onClick={onContact}
+                  aria-label={`Contact ${name}`}
                   style={{
                     flex: 1, padding: '9px 12px',
                     fontSize: '0.73rem', fontWeight: 600,
@@ -556,23 +581,23 @@ const ContactCardComponent = ({
                     transition: 'all 0.2s ease', backdropFilter: 'blur(8px)',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background  = accentDim.replace('0.28', '0.52');
-                    e.currentTarget.style.transform   = 'translateY(-1px)';
-                    e.currentTarget.style.boxShadow   = `0 6px 20px ${accentDim}`;
+                    e.currentTarget.style.background = accentDim.replace('0.28', '0.52');
+                    e.currentTarget.style.transform  = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow  = `0 6px 20px ${accentDim}`;
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background  = accentDim;
-                    e.currentTarget.style.transform   = 'translateY(0)';
-                    e.currentTarget.style.boxShadow   = 'none';
+                    e.currentTarget.style.background = accentDim;
+                    e.currentTarget.style.transform  = 'translateY(0)';
+                    e.currentTarget.style.boxShadow  = 'none';
                   }}
                 >
                   {contactText}
                 </button>
               )}
-
               {onViewGallery && (
                 <button
-                  type="button" onClick={onViewGallery} aria-label={`View ${name}'s gallery`}
+                  type="button" onClick={onViewGallery}
+                  aria-label={`View ${name}'s gallery`}
                   style={{
                     flex: onContact ? 1 : undefined,
                     padding: '9px 14px', fontSize: '0.73rem', fontWeight: 600,
@@ -596,17 +621,15 @@ const ContactCardComponent = ({
                 </button>
               )}
             </div>
+          </div>
 
-          </div>{/* end bottom half */}
-
-          {/* Global rim border over everything */}
+          {/* Rim border */}
           <div aria-hidden="true" style={{
             position: 'absolute', inset: 0, borderRadius: CARD_RADIUS,
             border: '1px solid rgba(255,255,255,0.08)',
             background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 50%)',
             mixBlendMode: 'screen', pointerEvents: 'none', zIndex: 10,
           }} />
-
         </div>
       </div>
     </div>
