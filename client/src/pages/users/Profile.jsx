@@ -14,12 +14,26 @@ export default function Profile() {
 
   // ── Avatar upload state ───────────────────────────────────────────────
   const [avatarUploading, setAvatarUploading] = useState(false);
-  const [avatarMsg,       setAvatarMsg]       = useState(null); // { type: 'success'|'error', text }
+  const [avatarMsg,       setAvatarMsg]       = useState(null);
+  const [avatarSrc,       setAvatarSrc]       = useState(null); // local preview
   const fileInputRef = useRef(null);
+
+  // ── Sync avatarSrc when user.avatar changes ───────────────────────────
+  useEffect(() => {
+    if (!user?.avatar) {
+      setAvatarSrc(null);
+      return;
+    }
+    // Force HTTPS — fixes mixed content errors on Vercel
+    const url = user.avatar.startsWith('http:')
+      ? user.avatar.replace('http:', 'https:')
+      : user.avatar;
+    setAvatarSrc(url);
+  }, [user?.avatar]);
 
   // ── Fetch user's share sessions ───────────────────────────────────────
   useEffect(() => {
-    api.get('/share/my')
+    api.get('/api/share/my')          // ← fixed: was '/share/my'
       .then(({ data }) => {
         setSessions(Array.isArray(data) ? data : []);
         setSessionsError(false);
@@ -38,11 +52,14 @@ export default function Profile() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Client-side validation
     if (!file.type.startsWith('image/'))
       return setAvatarMsg({ type: 'error', text: 'Please select an image file' });
     if (file.size > 5 * 1024 * 1024)
       return setAvatarMsg({ type: 'error', text: 'Image must be under 5MB' });
+
+    // Show instant local preview before upload finishes
+    const localPreview = URL.createObjectURL(file);
+    setAvatarSrc(localPreview);
 
     const formData = new FormData();
     formData.append('avatar', file);
@@ -51,22 +68,30 @@ export default function Profile() {
     setAvatarMsg(null);
 
     try {
-      const { data } = await api.patch('/auth/avatar', formData, {
+      const { data } = await api.patch('/api/auth/avatar', formData, {  // ← fixed: was '/auth/avatar'
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      updateUser({ avatar: data.avatar });
+
+      // Force HTTPS on returned Cloudinary URL
+      const secureUrl = data.avatar?.startsWith('http:')
+        ? data.avatar.replace('http:', 'https:')
+        : data.avatar;
+
+      updateUser({ avatar: secureUrl });
+      setAvatarSrc(secureUrl);
       setAvatarMsg({ type: 'success', text: 'Profile picture updated!' });
     } catch (err) {
+      // Revert preview on failure
+      setAvatarSrc(user?.avatar ?? null);
       setAvatarMsg({
         type: 'error',
         text: err.response?.data?.message || 'Upload failed. Try again.',
       });
     } finally {
       setAvatarUploading(false);
-      // Reset so the same file can be picked again
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
-  }, [updateUser]);
+  }, [updateUser, user?.avatar]);
 
   // ── Avatar initials fallback ──────────────────────────────────────────
   const initials = user?.name
@@ -82,7 +107,7 @@ export default function Profile() {
     const d = new Date(dateStr);
     if (isNaN(d)) return '—';
     return d.toLocaleDateString('en-US', {
-      year:  'numeric',   // ← was 'month' which is invalid
+      year:  'numeric',
       month: 'long',
       day:   'numeric',
     });
@@ -112,10 +137,31 @@ export default function Profile() {
 
   // ── Stat cards ────────────────────────────────────────────────────────
   const stats = [
-    { label: 'Total',   value: sessions.length, color: 'text-white'      },
-    { label: 'Active',  value: active.length,   color: 'text-green-400'  },
-    { label: 'Expired', value: expired.length,  color: 'text-red-400'    },
+    { label: 'Total',   value: sessions.length, color: 'text-white'     },
+    { label: 'Active',  value: active.length,   color: 'text-green-400' },
+    { label: 'Expired', value: expired.length,  color: 'text-red-400'   },
   ];
+
+  // ── Reusable avatar display ───────────────────────────────────────────
+  // Used in both ProfileCard and the upload card
+  const AvatarImage = ({ size = 16 }) => (
+    avatarSrc ? (
+      <img
+        src={avatarSrc}
+        alt={`${user?.name ?? 'User'} avatar`}
+        referrerPolicy="no-referrer"            // ← fixes Google avatar 403 blocks
+        className={`w-${size} h-${size} rounded-full object-cover border-2 border-zinc-700`}
+        onError={() => setAvatarSrc(null)}      // ← silently fall back to initials on broken URL
+      />
+    ) : (
+      <div className={`w-${size} h-${size} rounded-full bg-violet-600/30 border-2
+                       border-violet-500/50 flex items-center justify-center
+                       font-bold text-violet-300 select-none
+                       ${size >= 16 ? 'text-xl' : 'text-xs'}`}>
+        {initials}
+      </div>
+    )
+  );
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-8">
@@ -130,8 +176,8 @@ export default function Profile() {
             handle={user?.email?.split('@')[0] ?? 'user'}
             title={user?.isAdmin ? 'Administrator' : 'Photographer'}
             status="Online"
-            avatarUrl={user?.avatar ?? ''}
-            miniAvatarUrl={user?.avatar ?? ''}
+            avatarUrl={avatarSrc || null}       // ← pass null, not '' — avoids broken <img src="">
+            miniAvatarUrl={avatarSrc || null}
             contactText="Edit Photo"
             onContactClick={() => fileInputRef.current?.click()}
           />
@@ -144,19 +190,7 @@ export default function Profile() {
 
               {/* Preview / initials */}
               <div className="relative flex-shrink-0">
-                {user?.avatar ? (
-                  <img
-                    src={user.avatar}
-                    alt={`${user.name ?? 'User'} avatar`}
-                    className="w-16 h-16 rounded-full object-cover border-2 border-zinc-700"
-                  />
-                ) : (
-                  <div className="w-16 h-16 rounded-full bg-violet-600/30 border-2 border-violet-500/50
-                                  flex items-center justify-center text-xl font-bold text-violet-300
-                                  select-none">
-                    {initials}
-                  </div>
-                )}
+                <AvatarImage size={16} />
 
                 {/* Camera button overlay */}
                 <button
