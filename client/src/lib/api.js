@@ -2,7 +2,9 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
-  withCredentials: true,
+  // withCredentials: true  ← REMOVED
+  // Cookies/credentials cannot be used with wildcard CORS (Access-Control-Allow-Origin: *)
+  // Auth is handled via Authorization: Bearer <token> header instead (see interceptor below)
 });
 
 // Attach JWT token to every request automatically

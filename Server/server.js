@@ -2,7 +2,6 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express     from 'express';
-import cors        from 'cors';
 import connectDB   from './config/db.js';
 import authRoutes  from './routes/auth.js';
 import shareRoutes from './routes/share.js';
@@ -11,50 +10,22 @@ import { cleanupMiddleware } from './jobs/cleanupJob.js';
 
 const app = express();
 
-// ── CORS — must be FIRST before everything else ────────────────────────────
-// Handles the OPTIONS preflight that browsers send before every real request
-const allowedOrigins = [
-  process.env.CLIENT_URL
-].filter(Boolean);
-
+// ── CORS — allow ALL origins ───────────────────────────────────────────────
+// Wildcard '*' means any domain can call this API.
+// NOTE: credentials: true (cookies) cannot be used with '*' — that is a
+// browser security rule. Use Authorization: Bearer <token> header instead.
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
+  res.setHeader('Access-Control-Allow-Origin',  '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
 
-  // Set CORS headers on every single response
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader(
-    'Access-Control-Allow-Methods',
-    'GET, POST, PUT, PATCH, DELETE, OPTIONS'
-  );
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization'
-  );
-
-  // Preflight request — respond immediately with 200 and stop here
-  // Browsers send OPTIONS before every cross-origin request
+  // Preflight — browsers send OPTIONS before every cross-origin request
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
 
   next();
 });
-
-// Keep cors() package as well for compatibility
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      callback(new Error(`CORS: origin "${origin}" not allowed`));
-    },
-    credentials: true,
-  })
-);
 
 // ── Connect DB ─────────────────────────────────────────────────────────────
 connectDB();
