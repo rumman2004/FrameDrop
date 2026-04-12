@@ -67,7 +67,7 @@ app.use((err, _req, res, _next) => {
 });
 
 // ── Dev only ───────────────────────────────────────────────────────────────
-if (process.env.NODE_ENV !== 'production') {
+if (!process.env.VERCEL) {
   import('./jobs/cleanupJob.js')
     .then(({ startCleanupJob }) => {
       const PORT = process.env.PORT ?? 5000;

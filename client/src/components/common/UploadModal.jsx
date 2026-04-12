@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import api from '../../lib/api';
+import axios from 'axios';
 import {
   X, Upload, FolderPlus, ImagePlus,
   Loader2, CheckCircle, AlertCircle,
@@ -132,22 +133,67 @@ export default function UploadModal({ isOpen, onClose }) {
     setUploading(true);
     setProgress(0);
 
-    const formData = new FormData();
-    formData.append('title',  folderName.trim());
-    formData.append('expiry', expiry);
-    if (pin) formData.append('pin', pin);
-    files.forEach(({ file }) => formData.append('files', file));
-
     try {
-      await api.post('/share', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: evt =>
-          setProgress(Math.round((evt.loaded / (evt.total || 1)) * 100)),
+      // 1. Get signature
+      const { data: signData } = await api.get('/share/sign-upload');
+      const { signature, timestamp, cloudName, apiKey } = signData;
+
+      // 2. Upload files to Cloudinary directly
+      const uploadedFiles = [];
+      let totalLoaded = 0;
+      const totalSizeToUpload = files.reduce((sum, f) => sum + f.file.size, 0);
+
+      // Upload in parallel
+      const uploadPromises = files.map(async ({ file }) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('api_key', apiKey);
+        formData.append('timestamp', timestamp);
+        formData.append('signature', signature);
+        formData.append('folder', 'framedrop');
+
+        const isVideo = file.type.startsWith('video/');
+        const resourceType = isVideo ? 'video' : 'image';
+        
+        // Use axios specifically to get progress events and avoid passing auth headers to cloudinary
+        const res = await axios.post(
+          `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`,
+          formData,
+          {
+            onUploadProgress: (evt) => {
+              // Note: this progress is an approximation since multiple uploads happen at once
+              totalLoaded += evt.loaded;
+              const overallProgress = Math.min(Math.round((totalLoaded / totalSizeToUpload) * 90), 90);
+              setProgress(overallProgress);
+            }
+          }
+        );
+
+        return {
+          publicId: res.data.public_id,
+          url: res.data.secure_url,
+          type: resourceType,
+          originalName: file.name,
+          size: file.size,
+        };
       });
+
+      const cloudinaryResults = await Promise.all(uploadPromises);
+
+      // 3. Save session to our backend
+      setProgress(95);
+      await api.post('/share', {
+        title: folderName.trim(),
+        expiry: expiry,
+        pin: pin,
+        files: cloudinaryResults
+      });
+
       setDone(true);
       setProgress(100);
     } catch (err) {
-      setError(err.response?.data?.message || 'Upload failed. Please try again.');
+      console.error('Upload error:', err);
+      setError(err.response?.data?.message || err.response?.data?.error?.message || 'Upload failed. Please try again.');
       setUploading(false);
     }
   };

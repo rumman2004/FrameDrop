@@ -2,6 +2,7 @@ import express from 'express';
 import upload from '../middleware/upload.js';
 import protect from '../middleware/auth.js';
 import {
+  getUploadSignature,
   createShare,
   getShare,
   getSessionById,
@@ -16,13 +17,8 @@ const router = express.Router();
 // IMPORTANT: specific string routes must come BEFORE wildcard /:param routes
 // or Express will match /:token / /:id before reaching /my, /session/:id etc.
 
-router.post(
-  '/',                          // POST   /api/share
-  protect,
-  upload.array('files', 50),
-  createShare,
-);
-
+router.post('/', protect, createShare);
+router.get('/sign-upload', protect, getUploadSignature);
 router.get('/my',        protect, getUserShares);    // GET    /api/share/my
 router.get('/session/:id', protect, getSessionById); // GET    /api/share/session/:id  ← owner view
 router.delete('/:id',    protect, deleteShare);      // DELETE /api/share/:id

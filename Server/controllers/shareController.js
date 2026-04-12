@@ -21,6 +21,36 @@ async function getOwnerStats(ownerId) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// GET UPLOAD SIGNATURE
+// GET /api/share/sign-upload
+// Protected — requires auth
+// ─────────────────────────────────────────────────────────────────────────
+export const getUploadSignature = async (req, res) => {
+  try {
+    const timestamp = Math.round(new Date().getTime() / 1000);
+    const paramsToSign = {
+      timestamp,
+      folder: 'framedrop',
+    };
+
+    const signature = cloudinary.utils.api_sign_request(
+      paramsToSign,
+      process.env.CLOUDINARY_API_SECRET
+    );
+
+    return res.json({
+      timestamp,
+      signature,
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+      apiKey: process.env.CLOUDINARY_API_KEY,
+    });
+  } catch (err) {
+    console.error('getUploadSignature error:', err);
+    return res.status(500).json({ message: 'Failed to generate upload signature' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────
 // CREATE SHARE
 // POST /api/share
 // Protected — requires auth
@@ -31,9 +61,8 @@ export const createShare = async (req, res) => {
       title  = '',
       pin    = '',
       expiry = 6,
+      files  = [],
     } = req.body;
-
-    const files = req.files;
 
     // Validate title
     if (!title || !title.trim()) {
@@ -78,12 +107,12 @@ export const createShare = async (req, res) => {
     const token     = nanoid(12);
     const expiresAt = new Date(Date.now() + expiryNum * 60 * 60 * 1_000);
 
-    // Map uploaded files
+    // Map uploaded files (from JSON body now)
     const fileData = files.map(f => ({
-      publicId:     f.filename,
-      url:          f.path,
-      type:         f.mimetype.startsWith('video/') ? 'video' : 'image',
-      originalName: f.originalname,
+      publicId:     f.publicId,
+      url:          f.url,
+      type:         f.type, // 'image' or 'video'
+      originalName: f.originalName,
       size:         f.size,
     }));
 
